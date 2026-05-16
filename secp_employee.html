@@ -989,6 +989,19 @@ function showScreen(name) {
 
 
 function openCamera() {
+  // Try Google Lens / native QR on Android Chrome
+  let ua = navigator.userAgent.toLowerCase();
+  if (/android/.test(ua) && /chrome/.test(ua)) {
+    // Google Lens intent for Chrome on Android
+    let appUrl = window.location.href;
+    window.location.href = 'intent://lens.google.com/search?ep=gsbubb&re=df&p=' + encodeURIComponent(appUrl) + '#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;end;';
+    setTimeout(() => startCamOverlay(), 1200);
+    return;
+  }
+  startCamOverlay();
+}
+
+function startCamOverlay() {
   // Open native camera via getUserMedia stream in fullscreen
   let overlay = document.createElement('div');
   overlay.id = 'cam-overlay';
