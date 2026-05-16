@@ -545,19 +545,30 @@ body {
 
 <!-- QR CAMERA SCREEN -->
 <div id="qr-camera-screen" style="display:none;position:fixed;inset:0;background:#000;z-index:60;flex-direction:column;">
-  <div style="padding:16px 20px;display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.8);">
-    <button onclick="closeCamera()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:13px;cursor:pointer;">✕ Zamknij</button>
-    <div style="font-size:14px;font-weight:600;color:#fff;">Skieruj kamerę na kod QR</div>
+  <div style="padding:14px 20px;display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.85);position:relative;z-index:2;">
+    <button onclick="closeCamera()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;">✕ Zamknij</button>
+    <div style="font-size:14px;font-weight:600;color:#fff;flex:1;text-align:center;">Skieruj na kod QR</div>
   </div>
-  <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;">
-    <video id="qr-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay></video>
-    <canvas id="qr-canvas" style="display:none;"></canvas>
-    <div style="position:absolute;width:220px;height:220px;border:3px solid rgba(255,255,255,.8);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.5);"></div>
+  <div style="flex:1;position:relative;overflow:hidden;">
+    <video id="qr-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="width:240px;height:240px;position:relative;">
+        <div style="position:absolute;top:0;left:0;width:32px;height:32px;border-top:3px solid #fff;border-left:3px solid #fff;border-radius:4px 0 0 0;"></div>
+        <div style="position:absolute;top:0;right:0;width:32px;height:32px;border-top:3px solid #fff;border-right:3px solid #fff;border-radius:0 4px 0 0;"></div>
+        <div style="position:absolute;bottom:0;left:0;width:32px;height:32px;border-bottom:3px solid #fff;border-left:3px solid #fff;border-radius:0 0 0 4px;"></div>
+        <div style="position:absolute;bottom:0;right:0;width:32px;height:32px;border-bottom:3px solid #fff;border-right:3px solid #fff;border-radius:0 0 4px 0;"></div>
+        <div style="position:absolute;top:50%;left:0;right:0;height:2px;background:rgba(26,86,219,.8);animation:scan 2s linear infinite;"></div>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(transparent,rgba(0,0,0,.4));pointer-events:none;"></div>
   </div>
-  <div style="padding:16px;text-align:center;background:rgba(0,0,0,.8);">
-    <div id="qr-status" style="font-size:13px;color:rgba(255,255,255,.6);">Szukam kodu QR...</div>
+  <div style="padding:16px;text-align:center;background:rgba(0,0,0,.85);">
+    <div id="qr-status" style="font-size:13px;color:rgba(255,255,255,.7);">Szukam kodu QR...</div>
   </div>
 </div>
+<style>@keyframes scan{0%{top:10%}50%{top:85%}100%{top:10%}}</style>
+<video id="qr-video" style="display:none;"></video>
+<canvas id="qr-canvas" style="display:none;"></canvas>
 
 <!-- DELEGATION MODAL -->
 <div class="modal-overlay" id="delegation-modal" onclick="closeDelegationOutside(event)">
@@ -993,29 +1004,61 @@ function openCamera() {
   let screen = document.getElementById('qr-camera-screen');
   screen.style.display = 'flex';
   screen.style.flexDirection = 'column';
-  document.getElementById('qr-status').textContent = 'Uruchamiam kamerę...';
-  document.getElementById('qr-status').style.color = 'rgba(255,255,255,.6)';
-  navigator.mediaDevices.getUserMedia({ 
-    video: { 
+
+  navigator.mediaDevices.getUserMedia({
+    video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      focusMode: 'continuous',
-      advanced: [{ focusMode: 'continuous' }]
-    } 
-  })
-    .then(stream => {
-      cameraStream = stream;
-      let video = document.getElementById('qr-video');
-      video.srcObject = stream;
-      video.play();
-      document.getElementById('qr-status').textContent = 'Szukam kodu QR...';
-      scanInterval = setInterval(scanFrame, 250);
-    })
-    .catch(err => {
-      document.getElementById('qr-status').textContent = 'Brak dostępu do kamery — zezwól w ustawieniach przeglądarki';
-      document.getElementById('qr-status').style.color = '#f87171';
-    });
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    }
+  }).then(stream => {
+    cameraStream = stream;
+    let video = document.getElementById('qr-video');
+    video.srcObject = stream;
+    video.play();
+
+    // Apply continuous autofocus after stream starts
+    let track = stream.getVideoTracks()[0];
+    let capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    let constraints = {};
+    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+      constraints.advanced = [{ focusMode: 'continuous' }];
+    }
+    if (capabilities.zoom) {
+      constraints.zoom = capabilities.zoom.min;
+    }
+    if (Object.keys(constraints).length) track.applyConstraints(constraints).catch(() => {});
+
+    scanInterval = setInterval(scanFrame, 300);
+  }).catch(err => {
+    document.getElementById('qr-status').textContent = 'Brak dostępu do kamery';
+    document.getElementById('qr-status').style.color = '#f87171';
+  });
+}
+
+function processQRPhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  let file = input.files[0];
+  let img = new Image();
+  img.onload = function() {
+    let canvas = document.getElementById('qr-canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    let ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    if (typeof jsQR !== 'undefined') {
+      let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+      if (code) {
+        handleQRCode(code.data);
+      } else {
+        showEmpToast('Nie znaleziono kodu QR — spróbuj ponownie');
+      }
+    }
+    // Reset input so same file can be selected again
+    input.value = '';
+  };
+  img.src = URL.createObjectURL(file);
 }
 
 function closeCamera() {
