@@ -543,30 +543,7 @@ body {
   </div>
 </div>
 
-<!-- QR CAMERA SCREEN -->
-<div id="qr-camera-screen" style="display:none;position:fixed;inset:0;background:#000;z-index:60;flex-direction:column;">
-  <div style="padding:14px 20px;display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.85);position:relative;z-index:2;">
-    <button onclick="closeCamera()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;">✕ Zamknij</button>
-    <div style="font-size:14px;font-weight:600;color:#fff;flex:1;text-align:center;">Skieruj na kod QR</div>
-  </div>
-  <div style="flex:1;position:relative;overflow:hidden;">
-    <video id="qr-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-      <div style="width:240px;height:240px;position:relative;">
-        <div style="position:absolute;top:0;left:0;width:32px;height:32px;border-top:3px solid #fff;border-left:3px solid #fff;border-radius:4px 0 0 0;"></div>
-        <div style="position:absolute;top:0;right:0;width:32px;height:32px;border-top:3px solid #fff;border-right:3px solid #fff;border-radius:0 4px 0 0;"></div>
-        <div style="position:absolute;bottom:0;left:0;width:32px;height:32px;border-bottom:3px solid #fff;border-left:3px solid #fff;border-radius:0 0 0 4px;"></div>
-        <div style="position:absolute;bottom:0;right:0;width:32px;height:32px;border-bottom:3px solid #fff;border-right:3px solid #fff;border-radius:0 0 4px 0;"></div>
-        <div style="position:absolute;top:50%;left:0;right:0;height:2px;background:rgba(26,86,219,.8);animation:scan 2s linear infinite;"></div>
-      </div>
-    </div>
-    <div style="position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(transparent,rgba(0,0,0,.4));pointer-events:none;"></div>
-  </div>
-  <div style="padding:16px;text-align:center;background:rgba(0,0,0,.85);">
-    <div id="qr-status" style="font-size:13px;color:rgba(255,255,255,.7);">Szukam kodu QR...</div>
-  </div>
-</div>
-<style>@keyframes scan{0%{top:10%}50%{top:85%}100%{top:10%}}</style>
+
 <video id="qr-video" style="display:none;"></video>
 <canvas id="qr-canvas" style="display:none;"></canvas>
 
@@ -997,111 +974,91 @@ function showScreen(name) {
 }
 
 // ── Camera QR Scanner ─────────────────────────────────────────
-let cameraStream = null;
-let scanInterval = null;
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function openCamera() {
-  // On Android Chrome - try to open Google Lens / native QR
-  let ua = navigator.userAgent.toLowerCase();
-  if (/android/.test(ua)) {
-    // Try native QR scanner intent
-    window.location.href = 'intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.google.zxing.client.android;end';
-    // Fallback to camera after 1s if intent didn't open
-    setTimeout(() => {
-      document.getElementById('qr-camera-screen').style.display = 'flex';
-      document.getElementById('qr-camera-screen').style.flexDirection = 'column';
-      startLiveCamera();
-    }, 1000);
-  } else {
-    // iOS / desktop - show live camera
-    document.getElementById('qr-camera-screen').style.display = 'flex';
-    document.getElementById('qr-camera-screen').style.flexDirection = 'column';
-    startLiveCamera();
-  }
+  // Open native camera via getUserMedia stream in fullscreen
+  let overlay = document.createElement('div');
+  overlay.id = 'cam-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:999;display:flex;flex-direction:column;';
+  overlay.innerHTML = 
+    '<div style="padding:14px 20px;display:flex;align-items:center;background:rgba(0,0,0,.9);">' +
+    '<button onclick="closeCam()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:9px 16px;color:#fff;font-size:14px;cursor:pointer;font-family:inherit;">✕ Zamknij</button>' +
+    '<div style="flex:1;text-align:center;font-size:14px;font-weight:600;color:#fff;">Skieruj na kod QR</div></div>' +
+    '<div style="flex:1;position:relative;overflow:hidden;">' +
+    '<video id="cam-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>' +
+    '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">' +
+    '<div style="width:230px;height:230px;border:2px solid rgba(255,255,255,.8);border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);"></div></div></div>' +
+    '<div style="padding:14px;text-align:center;background:rgba(0,0,0,.9);">' +
+    '<div id="cam-status" style="font-size:13px;color:rgba(255,255,255,.6);">Szukam kodu QR...</div></div>';
+  document.body.appendChild(overlay);
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+    .then(stream => {
+      window._camStream = stream;
+      let video = document.getElementById('cam-video');
+      video.srcObject = stream;
+      video.play();
+      // Try autofocus
+      let track = stream.getVideoTracks()[0];
+      try {
+        let cap = track.getCapabilities ? track.getCapabilities() : {};
+        if (cap.focusMode && cap.focusMode.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        }
+      } catch(e) {}
+      // Scan loop
+      window._camInterval = setInterval(() => {
+        let v = document.getElementById('cam-video');
+        if (!v || !v.videoWidth) return;
+        let canvas = document.createElement('canvas');
+        canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+        canvas.getContext('2d').drawImage(v, 0, 0);
+        let img = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        if (typeof jsQR !== 'undefined') {
+          let code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+          if (code) {
+            clearInterval(window._camInterval);
+            document.getElementById('cam-status').textContent = '✓ Znaleziono!';
+            document.getElementById('cam-status').style.color = '#34d399';
+            setTimeout(() => { closeCam(); onQRFound(code.data); }, 400);
+          }
+        }
+      }, 250);
+    })
+    .catch(() => {
+      document.getElementById('cam-status').textContent = 'Brak dostępu do kamery — sprawdź uprawnienia';
+      document.getElementById('cam-status').style.color = '#f87171';
+    });
 }
 
-function startLiveCamera() {
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-  }).then(stream => {
-    cameraStream = stream;
-    let video = document.getElementById('qr-video');
-    video.srcObject = stream;
-    video.play();
-    let track = stream.getVideoTracks()[0];
-    if (track.getCapabilities) {
-      let cap = track.getCapabilities();
-      if (cap.focusMode && cap.focusMode.includes('continuous')) {
-        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
-      }
-    }
-    scanInterval = setInterval(scanFrame, 300);
-  }).catch(() => {
-    document.getElementById('qr-status').textContent = 'Brak dostępu do kamery — otwórz aparat telefonu ręcznie';
-    document.getElementById('qr-status').style.color = '#f87171';
-  });
+function closeCam() {
+  if (window._camStream) { window._camStream.getTracks().forEach(t => t.stop()); window._camStream = null; }
+  if (window._camInterval) { clearInterval(window._camInterval); window._camInterval = null; }
+  let el = document.getElementById('cam-overlay');
+  if (el) el.remove();
 }
 
-function processQRPhoto(input) {
-  if (!input.files || !input.files[0]) return;
-  let file = input.files[0];
-  let img = new Image();
-  img.onload = function() {
-    let canvas = document.getElementById('qr-canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    let ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    if (typeof jsQR !== 'undefined') {
-      let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-      if (code) {
-        handleQRCode(code.data);
-      } else {
-        showEmpToast('Nie znaleziono kodu QR — spróbuj ponownie');
-      }
-    }
-    // Reset input so same file can be selected again
-    input.value = '';
-  };
-  img.src = URL.createObjectURL(file);
-}
-
-function closeCamera() {
-  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-  document.getElementById('qr-camera-screen').style.display = 'none';
-}
-
-function scanFrame() {
-  let video = document.getElementById('qr-video');
-  let canvas = document.getElementById('qr-canvas');
-  if (!video.videoWidth || !video.videoHeight) return;
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  let ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  if (typeof jsQR !== 'undefined') {
-    let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-    if (code) {
-      clearInterval(scanInterval);
-      document.getElementById('qr-status').textContent = 'Kod znaleziony!';
-      document.getElementById('qr-status').style.color = '#34d399';
-      setTimeout(() => handleQRCode(code.data), 400);
-    }
-  }
-}
-
-function handleQRCode(url) {
-  closeCamera();
+function onQRFound(url) {
   try {
     let u = new URL(url);
     let action = u.searchParams.get('action');
     let token = u.searchParams.get('token');
     if (action && token) {
-      let lastToken = sessionStorage.getItem('last-qr-token');
-      if (token !== lastToken) {
+      let last = sessionStorage.getItem('last-qr-token');
+      if (token !== last) {
         sessionStorage.setItem('last-qr-token', token);
         registerAction(action, true);
       } else {
